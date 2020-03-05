@@ -63,7 +63,7 @@ function remp_get_user( string $data = 'info' ) {
 
 function remp_get_user_token() {
 	if ( isset( $_COOKIE['n_token'] ) ) {
-		return $_COOKIE['n_token']
+		return $_COOKIE['n_token'];
 	} else {
 		return false;
 	}
