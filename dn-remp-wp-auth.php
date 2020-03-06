@@ -4,7 +4,7 @@
 /**
  * Plugin Name: DN REMP WP Auth
  * Plugin URI:  https://dennikn.sk/
- * Description: REMP login, authentification and user data retrieval
+ * Description: REMP login, authentification and user data retrieval. You need to define DN_REMP_HOST in your wp-config.php file for this plugin to work correctly.
  * Version:     1.0.0
  * Author:      Michal Rusina
  * Author URI:  http://michalrusina.sk/
