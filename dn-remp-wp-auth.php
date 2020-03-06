@@ -4,7 +4,7 @@
 /**
  * Plugin Name: DN REMP WP Auth
  * Plugin URI:  https://dennikn.sk/
- * Description: API to authenticate and retrieve user data from Wordpress
+ * Description: REMP login, authentification and user data retrieval
  * Version:     1.0.0
  * Author:      Michal Rusina
  * Author URI:  http://michalrusina.sk/
@@ -20,7 +20,16 @@ add_action( 'init', 'remp_wp_auth' );
 add_action( 'wp_enqueue_scripts', 'remp_login_form_script' );
 
 
-// Simple login form.
+/**
+ * Registers a block style.
+ *
+ * @since 1.0.0
+ *
+ * @param bool $echo Wether to return or echo the form HTML
+ *
+ * @return string Returns the HTML for login form
+ */
+
 function remp_login_form( $echo = true ) {
 	$html = '';
 
@@ -44,12 +53,22 @@ function remp_login_form( $echo = true ) {
 
 	if ( $echo ) {
 		echo $html;
-	} else {
-		return $html;
 	}
+
+	return $html;
 }
 
-// Returns user data or false if user is not logged in.
+
+/**
+ * Returns user data.
+ *
+ * @since 1.0.0
+ *
+ * @param string $data Wether to return basic "info" or list of current and future "subscriptions".
+ *
+ * @return array|false|null Returns data, false if not logged in or null if bad input or missing configuration.
+ */
+
 function remp_get_user( string $data = 'info' ) {
 	$apis = [
 		'info' => '/api/v1/user/info',
@@ -82,7 +101,15 @@ function remp_get_user( string $data = 'info' ) {
 	return $response['body'];
 }
 
-// Returns user token.
+
+/**
+ * Returns user token.
+ *
+ * @since 1.0.0
+ *
+ * @return string|false Returns user token or false if not logged in.
+ */
+
 function remp_get_user_token() {
 	if ( isset( $_COOKIE['n_token'] ) ) {
 		return $_COOKIE['n_token'];
@@ -91,12 +118,24 @@ function remp_get_user_token() {
 	}
 }
 
-// Localisation for login form.
+
+/**
+ * Localisations
+ *
+ * @since 1.0.0
+ */
+
 function remp_wp_auth() {
 	load_plugin_textdomain( 'dn-remp-wp-auth' );
 }
 
-// Adds login form handling, if you use your own custom handling feel free to remove_action this.
+
+/**
+ * Adds javascript handling for login form. If not needed, or if you use custom implementation, feel free to remove_action.
+ *
+ * @since 1.0.0
+ */
+
 function remp_login_form_script() {
 	wp_register_script( 'dn-remp-wp-auth', plugin_dir_url( __FILE__ ) . 'dn-remp-wp-auth.js', [ 'jquery' ], false, true );
 	wp_enqueue_script( 'dn-remp-wp-auth' );	
