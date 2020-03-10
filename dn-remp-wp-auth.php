@@ -21,7 +21,7 @@ add_action( 'wp_enqueue_scripts', 'remp_login_form_script' );
 
 
 /**
- * Registers a block style.
+ * Simple login form.
  *
  * @since 1.0.0
  *
