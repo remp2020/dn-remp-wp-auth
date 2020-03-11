@@ -4,7 +4,7 @@
 /**
  * Plugin Name: DN REMP WP Auth
  * Plugin URI:  https://dennikn.sk/
- * Description: REMP login, authentification and user data retrieval. You need to define DN_REMP_HOST in your wp-config.php file for this plugin to work correctly.
+ * Description: API to authenticate and retrieve user data from Wordpress
  * Version:     1.0.0
  * Author:      Michal Rusina
  * Author URI:  http://michalrusina.sk/
@@ -15,129 +15,140 @@ if ( !defined( 'WPINC' ) ) {
 	die;
 }
 
+class DN_REMP_WP_Auth {
+	function __construct() {
+		register_activation_hook( __FILE__, [ $this, 'register_activation_hook' ] );
+		register_deactivation_hook( __FILE__, 'flush_rewrite_rules' );
 
-add_action( 'init', 'remp_wp_auth' );
-add_action( 'wp_enqueue_scripts', 'remp_login_form_script' );
+		add_action( 'wp_head', [ $this, 'wp_head' ], 10 );
+		add_action( 'wp', [ $this, 'wp' ], 0 );
+		add_action( 'init', [ $this, 'init' ], 0, 1000 );
+		add_filter( 'query_vars', [ $this, 'query_vars' ], 0 );
+	}
 
+	function handle_request() {
+		$id = false;
+		$user = false;
 
-/**
- * Simple login form.
- *
- * @since 1.0.0
- *
- * @param bool $echo Wether to return or echo the form HTML
- *
- * @return string Returns the HTML for login form
- */
+		header( 'Content-Type: application/json; charset=utf-8' );
 
-function remp_login_form( $echo = true ) {
-	$html = '';
+		if ( !isset($_SERVER['HTTP_AUTHORIZATION']) ) {
+			status_header( 400 );
+			echo json_encode([
+				'message' => 'Authorization header with Bearer token is not set',
+			]);
+			exit;
+		}
+		$parts = explode(' ', $_SERVER['HTTP_AUTHORIZATION']);
+		if ( count($parts) != 2 ) {
+			status_header( 400 );
+			echo json_encode([
+				'message' => 'Authorization header contains invalid structure',
+			]);
+			exit;
+		}
+		if ( !strtolower($parts[0]) === 'bearer' ) {
+			status_header( 400 );
+			echo json_encode([
+				'message' => "Authorization header doesn't contains bearer token",
+			]);
+			exit;
+		}
+		if ( $parts[1] !== DN_REMP_WP_AUTH_TOKEN ) {
+			status_header( 401 );
+			echo json_encode([
+				'message' => 'Invalid authorization token provided',
+			]);
+			exit;
+		}
 
-	if ( defined( 'DN_REMP_HOST' ) ) {
-		$html = sprintf(
-			'
-			<form class="remp_login_form" action="%s">
-				<input class="remp_login_email" type="email" placeholder="%s">
-				<input class="remp_login_password" type="password" placeholder="%s">
-				<button class="remp_login_submit" type="submit">%s</button>
-			</form>
-			',
-			DN_REMP_HOST . '/api/v1/users/login/',
-			__( 'E-mail', 'dn-remp-wp-auth' ),
-			__( 'Password', 'dn-remp-wp-auth' ),
-			__( 'Login', 'dn-remp-wp-auth' )
-		);
+		if ( isset( $_POST[ 'token' ] ) ) {
+			$id = wp_validate_auth_cookie( $_POST[ 'token' ], 'logged_in' );
+		} else if ( isset( $_POST[ 'login' ] ) ) {
+			$user = get_user_by( 'login', $_POST[ 'login' ] );
+		} else if ( isset( $_POST[ 'email' ] ) ) {
+			$user = get_user_by( 'email', $_POST[ 'email' ] );
+		}
+
+		if ($user === false && $id === false) {
+			status_header( 404 );
+			exit;
+		}
+
+		if ( $user !== false && wp_check_password( $_POST[ 'password' ], $user->data->user_pass, $user->ID ) ) {
+			$id = $user->ID;
+		}
+
+		if ($id === false) {
+			status_header( 401 );
+			echo json_encode([
+				'message' => 'Unable to authenticate user',
+			]);
+			exit;
+		}
+
+		$user = get_userdata( $id );
+
+		unset( $user->data->user_activation_key );
+		unset( $user->data->user_pass );
+		unset( $user->caps );
+		unset( $user->cap_key );
+		unset( $user->filter );
+		unset( $user->allcaps );
+
+		$user->data->first_name = get_user_meta( $user->ID, 'first_name', true );
+		$user->data->last_name = get_user_meta( $user->ID, 'last_name', true );
+
+		echo json_encode( $user );
+		exit;
+	}
+
+	function wp_head() {
+		$id = get_current_user_id();
+
+		if ( $id != 0 ) {
+			printf( '<script> var %s = "%s"; </script>',
+				'DN_REMP_WP_Auth',
+				$_COOKIE[ LOGGED_IN_COOKIE ]
+			);
+		}
+	}
+
+	function wp( $wp ) {
+		if ( !empty( $wp->query_vars[ 'api' ] ) && !empty( $wp->query_vars[ 'remp-wp-auth' ] ) ) {
+			$this->handle_request();
+		}
+	}
+
+	function init() {
+		load_plugin_textdomain( 'dn-remp-wp-auth' );
+
+		add_rewrite_rule( '^api/v1/remp/auth?', 'index.php?api=1&remp-wp-auth=1', 'top' );
+
+		if ( get_option( 'flush_rewrite_rules' ) ) {
+			delete_option( 'flush_rewrite_rules' );
+			flush_rewrite_rules();
+		}
 	}
 	
-	$html = apply_filters( 'remp_login_form_html', $html );
-
-	if ( $echo ) {
-		echo $html;
+	function query_vars( $vars ) {
+		return array_unique( array_merge( $vars, [ 'api', 'remp-wp-auth' ] ) );
 	}
 
-	return $html;
+	function register_activation_hook() {
+		add_option( 'flush_rewrite_rules', true );
+	}
 }
 
-
-/**
- * Returns user data.
- *
- * @since 1.0.0
- *
- * @param string $data Wether to return basic "info" or list of current and future "subscriptions".
- *
- * @return array|false|null Returns data, false if not logged in or null if bad input or missing configuration.
- */
-
-function remp_get_user( string $data = 'info' ) {
-	$apis = [
-		'info' => '/api/v1/user/info',
-		'subscriptions' => '/api/v1/users/subscriptions'
-	];
-
-	if ( !defined( 'DN_REMP_HOST' ) || !in_array( $data, array_keys( $apis ) ) ) {
-		return null;
-	}
-
-	$token = remp_get_user_token();
-
-	if ( $token === false ) {
-		return false;
-	}
-
-	$headers = [
-		'Content-Type' => 'application/json',
-		'Authorization' => 'Bearer ' . $token
-	];
-
-	$response = wp_remote_get( DN_REMP_HOST . $apis[ $data ], [ 'headers' => $headers ] );
-
-	if ( is_wp_error( $response ) ) {
-		error_log( 'REMP get_user_subscriptions: ' . $response->get_error_message() );
-
-		return null;
-	}
-
-	return $response['body'];
-}
+new DN_REMP_WP_Auth();
 
 
-/**
- * Returns user token.
- *
- * @since 1.0.0
- *
- * @return string|false Returns user token or false if not logged in.
- */
+function dn_remp_wp_auth() {
+	$id = get_current_user_id();
 
-function remp_get_user_token() {
-	if ( isset( $_COOKIE['n_token'] ) ) {
-		return $_COOKIE['n_token'];
+	if ( $id != 0 && isset( $_COOKIE[ LOGGED_IN_COOKIE ] ) ) {
+		return $_COOKIE[ LOGGED_IN_COOKIE ];
 	} else {
 		return false;
 	}
 }
-
-
-/**
- * Localisations
- *
- * @since 1.0.0
- */
-
-function remp_wp_auth() {
-	load_plugin_textdomain( 'dn-remp-wp-auth' );
-}
-
-
-/**
- * Adds javascript handling for login form. If not needed, or if you use custom implementation, feel free to remove_action.
- *
- * @since 1.0.0
- */
-
-function remp_login_form_script() {
-	wp_register_script( 'dn-remp-wp-auth', plugin_dir_url( __FILE__ ) . 'dn-remp-wp-auth.js', [ 'jquery' ], false, true );
-	wp_enqueue_script( 'dn-remp-wp-auth' );	
-}
-
