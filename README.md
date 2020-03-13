@@ -6,7 +6,7 @@ The REMP WP Auth plugin allows you to use [remp/crm-wordpress-module](https://gi
 
 ### From this repository
 
-Go to the [releases](https://github.com/remp2020/wordpress-tokena-plugin/releases) section of the repository and download the most recent release.
+Go to the [releases](https://github.com/remp2020/dn-remp-wp-auth/releases) section of the repository and download the most recent release.
 
 Then, from your WordPress administration panel, go to `Plugins > Add New` and click the `Upload Plugin` button at the top of the page.
 
